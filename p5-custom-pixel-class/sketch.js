@@ -1,5 +1,6 @@
-// Custom Pixel Display using Classes
+// Assignment 6 Darren Chia
 // Advanced version with HSB color mapping and image replacement
+// My Changes: allowed changing of different camera modes through key presses, added a glitch mode by using altered offsets
 
 // ColorPixel class - represents a single pixel with color analysis
 class ColorPixel {
@@ -9,36 +10,29 @@ class ColorPixel {
     this.pixelSize = pixelSize;
     this.hsbValue = 0;
     this.brightness = 0;
-
-    // Screen position
     this.x = 0;
     this.y = 0;
   }
 
   // Update from video capture at this pixel's grid position
   updateFromCapture(capture, appWidth, appHeight) {
-    // Calculate position in capture
     let captureX = floor((this.gridX / cols) * capture.width);
     let captureY = floor((this.gridY / rows) * capture.height);
 
-    // Calculate screen position
     this.x = (this.gridX / cols) * appWidth;
     this.y = (this.gridY / rows) * appHeight;
 
-    // Get pixel offset
-    let offset = (captureY * capture.width + captureX) * 4;
+    const offset = (captureY * capture.width + captureX) * 4;
+    if (!capture.pixels || offset + 2 >= capture.pixels.length) return;
 
-    // Get RGB values
-    let r = capture.pixels[offset];
-    let g = capture.pixels[offset + 1];
-    let b = capture.pixels[offset + 2];
+    const r = capture.pixels[offset + 0];
+    const g = capture.pixels[offset + 1];
+    const b = capture.pixels[offset + 2];
 
-    // Calculate brightness and HSB value
     this.brightness = (r + g + b) / 3;
     this.hsbValue = map(this.brightness, 0, 255, 0, 360);
   }
 
-  // Display as colored image based on HSB value
   displayAsImage() {
     // Map hue (0-360) to color images
     // Based on the HSB color wheel
@@ -71,56 +65,68 @@ class ColorPixel {
   displayAsRainbow() {
     push();
     colorMode(HSB);
-    let hsbColor = color(this.hsbValue, 100, 100);
-    fill(hsbColor);
+    fill(this.hsbValue, 100, 100);
     rect(this.x, this.y, this.pixelSize, this.pixelSize);
     pop();
   }
+
+  // Changing the rgb offsets to give off glitch effect
+  displayAsGlitch(capture) {
+    let captureX = floor((this.gridX / cols) * capture.width);
+    let captureY = floor((this.gridY / rows) * capture.height);
+    if (captureX < 0 || captureY < 0 || captureX >= capture.width || captureY >= capture.height) return;
+
+    const base = (captureY * capture.width + captureX) * 4;
+    if (!capture.pixels || base + 19 >= capture.pixels.length) return;
+
+    const r = capture.pixels[base + 16]; // 4 px to right
+    const g = capture.pixels[base + 6];  // 1 px right + 2 bytes
+    const b = capture.pixels[base + 2];  // current 
+
+    fill(r || 0, g || 0, b || 0);
+    rect(this.x, this.y, this.pixelSize, this.pixelSize);
+  }
 }
 
-// Global variables
+// -------- Globals --------
 let capture;
 let pixelGrid = [];
 let red, green, blue, yellow, purple, orange, pink, cyan;
 
-// Video and app dimensions
 let scaleValue = 20;
-let videoWidth = 1920;
-let videoHeight = 1080;
-let appWidth = 1280;
-let appHeight = 720;
+let videoWidth = 1920, videoHeight = 1080;
+let appWidth = 1280, appHeight = 720;
 
-// Grid settings
+// Changed gridsize to 1 and pixelSize to 14 to make it look more detailed
 let cols, rows;
-let gridSize = 2;
-let pixelSize = 25;
+let gridSize = 1;     // grid sampling density for tile modes (2 is fine)
+let pixelSize = 14;
+
+let displayMode = 1;  
 
 function preload() {
-  // Load color images
-  red = loadImage("images/red.png");
-  green = loadImage("images/green.png");
-  blue = loadImage("images/blue.png");
+  red    = loadImage("images/red.png");
+  green  = loadImage("images/green.png");
+  blue   = loadImage("images/blue.png");
   yellow = loadImage("images/yellow.png");
   purple = loadImage("images/purple.png");
   orange = loadImage("images/orange.png");
-  pink = loadImage("images/pink.png");
-  cyan = loadImage("images/cyan.png");
+  pink   = loadImage("images/pink.png");
+  cyan   = loadImage("images/cyan.png");
 }
 
 function setup() {
   createCanvas(appWidth, appHeight);
 
-  // Setup video capture
   capture = createCapture(VIDEO);
   capture.size(videoWidth / scaleValue, videoHeight / scaleValue);
   capture.hide();
 
-  // Performance optimization
-  pixelDensity(1);
+  pixelDensity(1);     
   rectMode(CENTER);
   noStroke();
 
-  // Resize all images
+  /// Resize all images
   red.resize(pixelSize, pixelSize);
   green.resize(pixelSize, pixelSize);
   blue.resize(pixelSize, pixelSize);
@@ -130,11 +136,10 @@ function setup() {
   pink.resize(pixelSize, pixelSize);
   cyan.resize(pixelSize, pixelSize);
 
-  // Calculate grid dimensions
   cols = floor(capture.width / gridSize);
   rows = floor(capture.height / gridSize);
 
-  // Create grid of ColorPixel objects using nested loops
+   // Create grid of ColorPixel objects using nested loops
   for (let y = 0; y < rows; y++) {
     pixelGrid[y] = [];
     for (let x = 0; x < cols; x++) {
@@ -143,25 +148,35 @@ function setup() {
   }
 }
 
+// Key controls
+// Modes: 1=Normal, 2=Image grid, 3=Greyscale, 4=Rainbow, 5=Glitch 
+function keyPressed() {
+  if (key === '1') displayMode = 1;
+  if (key === '2') displayMode = 2;
+  if (key === '3') displayMode = 3;
+  if (key === '4') displayMode = 4;
+  if (key === '5') displayMode = 5; 
+}
+
 function draw() {
   background(255);
-
-  // Flip video horizontally (like Zoom)
-  translate(width, 0);
-  scale(-1, 1);
-
-  // Load pixel data from video
   capture.loadPixels();
+   if (displayMode === 1) {
+    // Normal webcam feed (mirrored), fills canvas
+    image(capture, 0, 0, appWidth, appHeight);
+    return;
+  }
 
-  // Update and display each pixel using nested loops
+  // For grid modes (2..5), update & draw each cell
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      pixelGrid[y][x].updateFromCapture(capture, appWidth, appHeight);
+      const p = pixelGrid[y][x];
+      p.updateFromCapture(capture, appWidth, appHeight);
 
-      // Choose display mode:
-      // pixelGrid[y][x].displayAsImage();
-      // pixelGrid[y][x].displayAsGreyscale();
-      pixelGrid[y][x].displayAsRainbow();
+      if      (displayMode === 2) p.displayAsImage();
+      else if (displayMode === 3) p.displayAsGreyscale();
+      else if (displayMode === 4) p.displayAsRainbow();
+      else if (displayMode === 5) p.displayAsGlitch(capture); 
     }
   }
 }
